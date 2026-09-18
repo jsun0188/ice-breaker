@@ -56,8 +56,8 @@
       button:hover { filter: brightness(.94); }
       button.secondary { color: #59677d; background: #e9edf4; }
       button:disabled { cursor: not-allowed; opacity: .55; }
-      .history { min-height: 300px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 46, 75, .04); }
-      .empty-state { padding: 42px; text-align: center; }
+      .history { min-height: 460px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 46, 75, .04); }
+      .empty-state { min-height: 460px; }
       .empty-icon { display: grid; width: 52px; height: 52px; margin: 12px auto 18px; place-items: center; color: var(--blue); background: var(--blue-wash); border-radius: 14px; font-size: 24px; }
       .history p { margin: 8px auto 22px; max-width: 420px; color: var(--muted); }
       .transcript-list { display: grid; gap: 14px; max-height: 460px; overflow-y: auto; padding: 24px; scroll-behavior: smooth; }
@@ -122,12 +122,7 @@
             </div>
           </div>
           <div class="history">
-            <div id="empty-state" class="empty-state">
-              <div class="empty-icon">✦</div>
-              <h2>No conversations yet</h2>
-              <p>Start a conversation to create your first chat and let Ice Breaker listen for every voice.</p>
-              <button id="empty-start" type="button">Start Conversation</button>
-            </div>
+            <div id="empty-state" class="empty-state" aria-label="Empty chat history"></div>
             <div id="transcript-list" class="transcript-list" hidden></div>
           </div>
           <div id="status" class="status" role="status" aria-live="polite"></div>
@@ -136,7 +131,7 @@
     </div>
 
     <script>
-      const startButtons = [document.querySelector('#start'), document.querySelector('#empty-start')];
+      const startButtons = [document.querySelector('#start')];
       const endButton = document.querySelector('#end');
       const status = document.querySelector('#status');
       const emptyState = document.querySelector('#empty-state');
@@ -147,6 +142,7 @@
       let audioSource;
       let audioProcessor;
       let playbackTime = 0;
+      const transcriptEntries = new Map();
 
       function socketUrl() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -172,16 +168,22 @@
         return output;
       }
 
-      function appendTranscript(role, speaker, text) {
+      function upsertTranscript(event) {
+        const { id, role, speaker, text } = event;
         if (!text) return;
         emptyState.hidden = true;
         transcriptList.hidden = false;
-        const entry = document.createElement('article');
-        entry.className = `transcript-entry ${role === 'assistant' ? 'assistant' : ''}`;
-        entry.innerHTML = `<span class="transcript-speaker"></span><p class="transcript-text"></p>`;
-        entry.querySelector('.transcript-speaker').textContent = speaker || 'Speaker';
-        entry.querySelector('.transcript-text').textContent = text;
-        transcriptList.appendChild(entry);
+        let entry = transcriptEntries.get(id);
+        if (!entry) {
+          entry = document.createElement('article');
+          entry.className = `transcript-entry ${role === 'assistant' ? 'assistant' : ''}`;
+          entry.innerHTML = `<span class="transcript-speaker"></span><p class="transcript-text"></p>`;
+          entry.querySelector('.transcript-speaker').textContent = speaker || 'Speaker';
+          transcriptEntries.set(id, entry);
+          transcriptList.appendChild(entry);
+        }
+        const textElement = entry.querySelector('.transcript-text');
+        textElement.textContent = event.type === 'transcript_delta' ? textElement.textContent + text : text;
         entry.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
 
@@ -221,7 +223,7 @@
           endButton.disabled = false;
           return;
         }
-        if (event.type === 'transcript') appendTranscript(event.role, event.speaker, event.text);
+        if (event.type === 'transcript' || event.type === 'transcript_delta' || event.type === 'transcript_done') upsertTranscript(event);
         if (event.type === 'audio') playPcm16(event.audio);
         if (event.type === 'error') {
           status.className = 'status error';

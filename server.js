@@ -6,6 +6,7 @@ const { WebSocketServer } = WebSocket;
 
 const port = process.env.PORT || 3000;
 const indexPage = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
+const partyHostPrompt = fs.readFileSync(path.join(__dirname, 'party-host-agent.md'), 'utf8');
 
 function sendJson(response, status, body) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -67,6 +68,31 @@ realtimeServer.on('connection', (browserSocket) => {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
   let fallbackSpeaker = 0;
+  let startSent = false;
+  const speakersByItem = new Map();
+
+  function speakerFor(event) {
+    const itemId = event.item_id || event.item?.id;
+    if (event.speaker) return event.speaker;
+    if (!itemId) return `Speaker ${(fallbackSpeaker++ % 2) + 1}`;
+    if (!speakersByItem.has(itemId)) speakersByItem.set(itemId, `Speaker ${(fallbackSpeaker++ % 2) + 1}`);
+    return speakersByItem.get(itemId);
+  }
+
+  function sendPartyStart() {
+    if (startSent || higgsSocket.readyState !== WebSocket.OPEN) return;
+    startSent = true;
+    higgsSocket.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'The organizer has started the party. Begin the first icebreaker activity now.' }],
+      },
+    }));
+    higgsSocket.send(JSON.stringify({ type: 'response.create' }));
+    sendSocketJson(browserSocket, { type: 'ready' });
+  }
 
   higgsSocket.on('open', () => {
     higgsSocket.send(JSON.stringify({
@@ -74,7 +100,7 @@ realtimeServer.on('connection', (browserSocket) => {
       session: {
         model: 'higgs-realtime',
         output_modalities: ['audio'],
-        instructions: 'Listen to the complete conversation. Respond briefly and warmly when appropriate. Do not interrupt people. Preserve the conversation context.',
+        instructions: partyHostPrompt,
         audio: {
           input: {
             format: { type: 'audio/pcm', rate: 24000 },
@@ -87,7 +113,7 @@ realtimeServer.on('connection', (browserSocket) => {
         },
       },
     }));
-    sendSocketJson(browserSocket, { type: 'ready' });
+    sendPartyStart();
   });
 
   higgsSocket.on('message', (data) => {
@@ -98,19 +124,60 @@ realtimeServer.on('connection', (browserSocket) => {
       return;
     }
 
-    if (event.type === 'conversation.item.input_audio_transcription.completed') {
-      const speaker = event.speaker || event.item?.speaker || `Speaker ${(fallbackSpeaker++ % 2) + 1}`;
-      sendSocketJson(browserSocket, { type: 'transcript', role: 'user', speaker, text: event.transcript || '' });
+    if (event.type === 'session.updated') {
+      sendPartyStart();
       return;
     }
 
-    if (event.type === 'response.audio.delta' && event.delta) {
+    if (event.type === 'conversation.item.input_audio_transcription.delta' && event.delta) {
+      sendSocketJson(browserSocket, {
+        type: 'transcript_delta',
+        id: event.item_id || 'speaker-current',
+        role: 'user',
+        speaker: speakerFor(event),
+        text: event.delta,
+      });
+      return;
+    }
+
+    if (event.type === 'conversation.item.input_audio_transcription.completed') {
+      const speaker = speakerFor(event);
+      sendSocketJson(browserSocket, {
+        type: 'transcript',
+        id: event.item_id || `speaker-${fallbackSpeaker}`,
+        role: 'user',
+        speaker,
+        text: event.transcript || '',
+        final: true,
+      });
+      return;
+    }
+
+    if ((event.type === 'response.audio.delta' || event.type === 'response.output_audio.delta') && event.delta) {
       sendSocketJson(browserSocket, { type: 'audio', audio: event.delta });
       return;
     }
 
-    if (event.type === 'response.audio_transcript.done' && event.transcript) {
-      sendSocketJson(browserSocket, { type: 'transcript', role: 'assistant', speaker: 'Ice Breaker', text: event.transcript });
+    if ((event.type === 'response.audio_transcript.delta' || event.type === 'response.output_audio_transcript.delta') && event.delta) {
+      sendSocketJson(browserSocket, {
+        type: 'transcript_delta',
+        id: event.response_id || 'assistant-current',
+        role: 'assistant',
+        speaker: 'Ice Breaker',
+        text: event.delta,
+      });
+      return;
+    }
+
+    if ((event.type === 'response.audio_transcript.done' || event.type === 'response.output_audio_transcript.done') && event.transcript) {
+      sendSocketJson(browserSocket, {
+        type: 'transcript_done',
+        id: event.response_id || 'assistant-current',
+        role: 'assistant',
+        speaker: 'Ice Breaker',
+        text: event.transcript,
+        final: true,
+      });
       return;
     }
 
