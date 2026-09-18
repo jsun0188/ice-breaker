@@ -77,10 +77,10 @@ realtimeServer.on('connection', (browserSocket) => {
         instructions: 'Listen to the complete conversation. Respond briefly and warmly when appropriate. Do not interrupt people. Preserve the conversation context.',
         audio: {
           input: {
-            format: 'pcm16',
+            format: { type: 'audio/pcm', rate: 24000 },
             turn_detection: { type: 'server_vad' },
           },
-          output: { voice: 'default' },
+          output: { format: { type: 'audio/pcm' }, voice: 'default' },
         },
         input_audio_transcription: {
           model: process.env.HIGGS_TRANSCRIPTION_MODEL || 'gpt-4o-transcribe-diarize',
