@@ -56,9 +56,15 @@
       button:hover { filter: brightness(.94); }
       button.secondary { color: #59677d; background: #e9edf4; }
       button:disabled { cursor: not-allowed; opacity: .55; }
-      .history { min-height: 300px; padding: 42px; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 46, 75, .04); }
+      .history { min-height: 300px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 46, 75, .04); }
+      .empty-state { padding: 42px; text-align: center; }
       .empty-icon { display: grid; width: 52px; height: 52px; margin: 12px auto 18px; place-items: center; color: var(--blue); background: var(--blue-wash); border-radius: 14px; font-size: 24px; }
       .history p { margin: 8px auto 22px; max-width: 420px; color: var(--muted); }
+      .transcript-list { display: grid; gap: 14px; padding: 24px; }
+      .transcript-entry { padding: 14px 16px; background: #f8faff; border: 1px solid var(--line); border-radius: 12px; }
+      .transcript-entry.assistant { background: var(--blue-wash); border-color: #dce4ff; }
+      .transcript-speaker { display: block; margin-bottom: 3px; color: var(--blue); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+      .transcript-text { margin: 0; color: var(--ink); }
       .status { min-height: 24px; margin-top: 18px; color: var(--muted); text-align: center; }
       .status.ready { color: #14804a; }
       .status.error { color: #c0392b; }
@@ -116,10 +122,13 @@
             </div>
           </div>
           <div class="history">
-            <div class="empty-icon">✦</div>
-            <h2>No conversations yet</h2>
-            <p>Start a conversation to create your first chat and let Ice Breaker help get things moving.</p>
-            <button id="empty-start" type="button">Start Conversation</button>
+            <div id="empty-state" class="empty-state">
+              <div class="empty-icon">✦</div>
+              <h2>No conversations yet</h2>
+              <p>Start a conversation to create your first chat and let Ice Breaker listen for every voice.</p>
+              <button id="empty-start" type="button">Start Conversation</button>
+            </div>
+            <div id="transcript-list" class="transcript-list" hidden></div>
           </div>
           <div id="status" class="status" role="status" aria-live="polite"></div>
         </section>
@@ -130,26 +139,133 @@
       const startButtons = [document.querySelector('#start'), document.querySelector('#empty-start')];
       const endButton = document.querySelector('#end');
       const status = document.querySelector('#status');
+      const emptyState = document.querySelector('#empty-state');
+      const transcriptList = document.querySelector('#transcript-list');
+      let socket;
+      let audioContext;
+      let mediaStream;
+      let audioSource;
+      let audioProcessor;
+      let playbackTime = 0;
+
+      function socketUrl() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${window.location.host}/api/realtime`;
+      }
+
+      function pcm16FromFloat32(input) {
+        const output = new ArrayBuffer(input.length * 2);
+        const view = new DataView(output);
+        for (let index = 0; index < input.length; index += 1) {
+          const sample = Math.max(-1, Math.min(1, input[index]));
+          view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        }
+        return output;
+      }
+
+      function downsample(input, inputRate, outputRate) {
+        if (inputRate === outputRate) return input;
+        const ratio = inputRate / outputRate;
+        const length = Math.floor(input.length / ratio);
+        const output = new Float32Array(length);
+        for (let index = 0; index < length; index += 1) output[index] = input[Math.floor(index * ratio)];
+        return output;
+      }
+
+      function appendTranscript(role, speaker, text) {
+        if (!text) return;
+        emptyState.hidden = true;
+        transcriptList.hidden = false;
+        const entry = document.createElement('article');
+        entry.className = `transcript-entry ${role === 'assistant' ? 'assistant' : ''}`;
+        entry.innerHTML = `<span class="transcript-speaker"></span><p class="transcript-text"></p>`;
+        entry.querySelector('.transcript-speaker').textContent = speaker || 'Speaker';
+        entry.querySelector('.transcript-text').textContent = text;
+        transcriptList.appendChild(entry);
+        entry.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+
+      function playPcm16(base64Audio) {
+        if (!audioContext) return;
+        const bytes = Uint8Array.from(atob(base64Audio), (character) => character.charCodeAt(0));
+        const samples = new Float32Array(bytes.byteLength / 2);
+        const view = new DataView(bytes.buffer);
+        for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 0x8000;
+        const buffer = audioContext.createBuffer(1, samples.length, 24000);
+        buffer.copyToChannel(samples, 0);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        playbackTime = Math.max(playbackTime, audioContext.currentTime);
+        source.start(playbackTime);
+        playbackTime += buffer.duration;
+      }
+
+      function cleanupAudio() {
+        if (audioProcessor) audioProcessor.disconnect();
+        if (audioSource) audioSource.disconnect();
+        if (mediaStream) mediaStream.getTracks().forEach((track) => track.stop());
+        if (audioContext) audioContext.close();
+        audioProcessor = null;
+        audioSource = null;
+        mediaStream = null;
+        audioContext = null;
+        playbackTime = 0;
+      }
+
+      function handleSocketMessage(message) {
+        const event = JSON.parse(message.data);
+        if (event.type === 'ready') {
+          status.className = 'status ready';
+          status.textContent = 'Listening for every voice…';
+          endButton.disabled = false;
+          return;
+        }
+        if (event.type === 'transcript') appendTranscript(event.role, event.speaker, event.text);
+        if (event.type === 'audio') playPcm16(event.audio);
+        if (event.type === 'error') {
+          status.className = 'status error';
+          status.textContent = event.message;
+          endConversation();
+        }
+      }
 
       async function startConversation() {
         startButtons.forEach((button) => { button.disabled = true; });
         status.className = 'status';
-        status.textContent = 'Connecting to Higgs…';
+        status.textContent = 'Requesting microphone access…';
         try {
-          const response = await fetch('/api/conversation/start', { method: 'POST' });
-          const result = await response.json();
-          if (!result.started) throw new Error(result.message);
-          status.className = 'status ready';
-          status.textContent = result.message;
-          endButton.disabled = false;
+          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+          audioContext = new AudioContext({ sampleRate: 24000 });
+          await audioContext.resume();
+          socket = new WebSocket(socketUrl());
+          socket.binaryType = 'arraybuffer';
+          socket.onmessage = handleSocketMessage;
+          socket.onerror = () => { throw new Error('Unable to connect to Higgs Realtime'); };
+          socket.onclose = () => { if (endButton.disabled === false) endConversation(); };
+          audioSource = audioContext.createMediaStreamSource(mediaStream);
+          audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+          audioProcessor.onaudioprocess = (event) => {
+            if (socket.readyState !== WebSocket.OPEN) return;
+            const samples = downsample(event.inputBuffer.getChannelData(0), audioContext.sampleRate, 24000);
+            socket.send(pcm16FromFloat32(samples));
+          };
+          const silence = audioContext.createGain();
+          silence.gain.value = 0;
+          audioSource.connect(audioProcessor);
+          audioProcessor.connect(silence).connect(audioContext.destination);
         } catch (error) {
+          cleanupAudio();
           status.className = 'status error';
-          status.textContent = error.message;
+          status.textContent = error.message || 'Unable to start conversation';
           startButtons.forEach((button) => { button.disabled = false; });
         }
       }
 
       function endConversation() {
+        if (socket) socket.close();
+        socket = null;
+        cleanupAudio();
         status.className = 'status';
         status.textContent = 'Conversation ended';
         endButton.disabled = true;

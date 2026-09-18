@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+node_modules/
 .insta/agent-session.json
 
 # Local: the control plane this machine linked against
