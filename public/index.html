@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ice Breaker</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #182230;
+        --muted: #738096;
+        --line: #e5eaf1;
+        --panel: #ffffff;
+        --wash: #f6f8fb;
+        --blue: #315efb;
+        --blue-wash: #eef2ff;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background: var(--wash);
+        font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+
+      .app { display: flex; min-height: 100vh; }
+      .sidebar {
+        width: 244px;
+        padding: 28px 18px;
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+      }
+      .brand { display: flex; align-items: center; gap: 10px; margin: 0 14px 34px; font-size: 20px; font-weight: 750; letter-spacing: -0.03em; }
+      .brand img { width: 30px; height: 30px; object-fit: contain; }
+      .brand-fallback { display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: var(--blue); border-radius: 9px; font-size: 17px; }
+      .nav-label { margin: 22px 14px 8px; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .1em; }
+      nav a { display: block; padding: 10px 14px; color: #536176; border-radius: 10px; text-decoration: none; }
+      nav a.active, nav a:hover { color: var(--blue); background: var(--blue-wash); }
+      .subnav { margin: 2px 0 0 14px; padding-left: 14px; border-left: 1px solid var(--line); }
+      .subnav a { padding: 7px 10px; font-size: 13px; }
+
+      main { flex: 1; min-width: 0; }
+      .top-banner { padding: 11px 42px; color: #fff; background: linear-gradient(90deg, #315efb, #6046d8); font-size: 14px; font-weight: 700; text-align: center; letter-spacing: .01em; }
+      header { display: flex; justify-content: space-between; align-items: center; padding: 24px 42px; background: var(--panel); border-bottom: 1px solid var(--line); }
+      .eyebrow { margin: 0 0 3px; color: var(--muted); font-size: 13px; }
+      h1 { margin: 0; font-size: 24px; letter-spacing: -0.04em; }
+      .profile { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+      .avatar { display: grid; width: 34px; height: 34px; place-items: center; color: #fff; background: #172554; border-radius: 50%; font-size: 12px; font-weight: 700; }
+      .content { max-width: 1000px; margin: 0 auto; padding: 42px; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+      h2 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+      .actions { display: flex; gap: 10px; }
+      button { border: 0; border-radius: 9px; padding: 11px 16px; color: #fff; background: var(--blue); font: inherit; font-weight: 700; cursor: pointer; }
+      button:hover { filter: brightness(.94); }
+      button.secondary { color: #59677d; background: #e9edf4; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      .history { min-height: 300px; padding: 42px; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px rgba(31, 46, 75, .04); }
+      .empty-icon { display: grid; width: 52px; height: 52px; margin: 12px auto 18px; place-items: center; color: var(--blue); background: var(--blue-wash); border-radius: 14px; font-size: 24px; }
+      .history p { margin: 8px auto 22px; max-width: 420px; color: var(--muted); }
+      .status { min-height: 24px; margin-top: 18px; color: var(--muted); text-align: center; }
+      .status.ready { color: #14804a; }
+      .status.error { color: #c0392b; }
+
+      @media (max-width: 720px) {
+        .sidebar { width: 72px; padding: 22px 10px; }
+        .brand { justify-content: center; margin: 8px 0 28px; font-size: 0; }
+        .brand img, .brand-fallback { width: 36px; height: 36px; }
+        .nav-label, .nav-text, .subnav { display: none; }
+        nav a { text-align: center; font-size: 0; }
+        nav a::first-letter { font-size: 18px; }
+        header, .content { padding: 22px; }
+        .profile span { display: none; }
+        .toolbar { align-items: flex-start; flex-direction: column; gap: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <p class="brand"><img src="/ice-breaker-logo-v2.png" alt="" onerror="this.hidden = true; this.nextElementSibling.hidden = false" /><span class="brand-fallback" aria-hidden="true" hidden>✦</span><span>Ice Breaker</span></p>
+        <nav aria-label="Main navigation">
+          <p class="nav-label">Workspace</p>
+          <a class="active" href="#conversation">◉ <span class="nav-text">Conversation</span></a>
+          <a href="#log">▤ <span class="nav-text">Log</span></a>
+          <a href="#guard-rails">◇ <span class="nav-text">Guard Rails</span></a>
+          <p class="nav-label">Groups</p>
+          <a href="#chat-groups">▣ <span class="nav-text">Chat Groups</span></a>
+          <div class="subnav">
+            <a href="#taylor">Taylor Swift</a>
+            <a href="#gordon">Gordon Ramsay</a>
+            <a href="#snoop">Snoop Dogg</a>
+          </div>
+          <a href="#parties">♢ <span class="nav-text">Parties</span></a>
+          <a href="#events">▧ <span class="nav-text">Events</span></a>
+        </nav>
+      </aside>
+
+      <main>
+        <div class="top-banner">Your AI-Cohost for party, event, or chitchat!!</div>
+        <header>
+          <div>
+            <p class="eyebrow">Conversation</p>
+            <h1>Start a new conversation</h1>
+          </div>
+          <div class="profile"><span>Guest</span><div class="avatar">G</div></div>
+        </header>
+
+        <section class="content" id="conversation">
+          <div class="toolbar">
+            <h2>Chat History</h2>
+            <div class="actions">
+              <button id="start" type="button">Start Conversation</button>
+              <button id="end" class="secondary" type="button" disabled>End Conversation</button>
+            </div>
+          </div>
+          <div class="history">
+            <div class="empty-icon">✦</div>
+            <h2>No conversations yet</h2>
+            <p>Start a conversation to create your first chat and let Ice Breaker help get things moving.</p>
+            <button id="empty-start" type="button">Start Conversation</button>
+          </div>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const startButtons = [document.querySelector('#start'), document.querySelector('#empty-start')];
+      const endButton = document.querySelector('#end');
+      const status = document.querySelector('#status');
+
+      async function startConversation() {
+        startButtons.forEach((button) => { button.disabled = true; });
+        status.className = 'status';
+        status.textContent = 'Connecting to Higgs…';
+        try {
+          const response = await fetch('/api/conversation/start', { method: 'POST' });
+          const result = await response.json();
+          if (!result.started) throw new Error(result.message);
+          status.className = 'status ready';
+          status.textContent = result.message;
+          endButton.disabled = false;
+        } catch (error) {
+          status.className = 'status error';
+          status.textContent = error.message;
+          startButtons.forEach((button) => { button.disabled = false; });
+        }
+      }
+
+      function endConversation() {
+        status.className = 'status';
+        status.textContent = 'Conversation ended';
+        endButton.disabled = true;
+        startButtons.forEach((button) => { button.disabled = false; });
+      }
+
+      startButtons.forEach((button) => button.addEventListener('click', startConversation));
+      endButton.addEventListener('click', endConversation);
+    </script>
+  </body>
+</html>
